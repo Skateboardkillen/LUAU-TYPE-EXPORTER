@@ -8,7 +8,7 @@ export function activate(context: vscode.ExtensionContext) {
         const document = editor.document;
         const text = document.getText();
 
-        // Identify the class declaration
+        // Identify the base class declaration
         const classNameMatch = text.match(/local\s+(\w+)\s*=\s*\{\}/);
         if (!classNameMatch) {
             vscode.window.showErrorMessage("Could not identify a Luau class declaration.");
@@ -19,8 +19,8 @@ export function activate(context: vscode.ExtensionContext) {
         const properties = new Set<string>();
         const methods = new Map<string, string>();
 
-        // Parse properties assigned to 'self'
-        const selfPropertyRegex = /self\.(\w+)\s*(?::\s*([\w<>|&?:]+))?\s*=\s*(.*)/g;
+        // Parse properties assigned to 'self' and infer basic types
+        const selfPropertyRegex = /self\.(\w+)\s*(?::\s*([a-zA-Z0-9_<>|&?{}[\]]+))?\s*=\s*(.*)/g;
         let propMatch;
         while ((propMatch = selfPropertyRegex.exec(text)) !== null) {
             const propName = propMatch[1];
@@ -36,8 +36,8 @@ export function activate(context: vscode.ExtensionContext) {
             properties.add(`    ${propName}: ${type},`);
         }
 
-        // Parse class methods and explicit return types
-        const methodRegex = new RegExp(`function\\s+${className}([:.])(\\w+)\\s*\\(([^)]*)\\)(?:\\s*:\\s*([^\\n]+))?`, 'g');
+        // Parse methods and capture explicit return types
+        const methodRegex = new RegExp(`function\\s+${className}([:.])(\\w+)\\s*\\(([^)]*)\\)(?:\\s*:\\s*([^{\\n]+))?`, 'g');
         let methodMatch;
         while ((methodMatch = methodRegex.exec(text)) !== null) {
             const separator = methodMatch[1];
@@ -60,22 +60,52 @@ export function activate(context: vscode.ExtensionContext) {
             methods.set(methodName, `    ${methodName}: (${signatureArgs}) -> ${returnType},`);
         }
 
-        // Construct the type export block
+        // Construct the final type block
         let typeExport = `export type ${className} = {\n`;
         properties.forEach(prop => { typeExport += prop + '\n'; });
         methods.forEach(methodSignature => { typeExport += methodSignature + '\n'; });
         typeExport += `}\n\n`;
 
-        // Check for an existing block to overwrite
-        const existingTypeRegex = new RegExp(`export\\s+type\\s+${className}\\s*=\\s*\\{[\\s\\S]*?\\}\\n*`);
-        const existingMatch = existingTypeRegex.exec(text);
+        // Safely locate existing block using bracket counting
+        const exportStartRegex = new RegExp(`export\\s+type\\s+${className}\\s*=\\s*\\{`);
+        const startMatch = exportStartRegex.exec(text);
 
-        // Apply the edit to the document
+        let existingRange: vscode.Range | null = null;
+
+        if (startMatch) {
+            const startIndex = startMatch.index;
+            const braceStart = startIndex + startMatch[0].length - 1;
+            let braceCount = 0;
+            let endIndex = -1;
+            
+            // Count nested brackets to find the true end of the block
+            for (let i = braceStart; i < text.length; i++) {
+                if (text[i] === '{') braceCount++;
+                else if (text[i] === '}') braceCount--;
+
+                if (braceCount === 0) {
+                    endIndex = i;
+                    break;
+                }
+            }
+
+            // Include trailing newlines in the replacement range
+            if (endIndex !== -1) {
+                let finalEndIndex = endIndex + 1;
+                while (finalEndIndex < text.length && (text[finalEndIndex] === '\n' || text[finalEndIndex] === '\r')) {
+                    finalEndIndex++;
+                }
+                existingRange = new vscode.Range(
+                    document.positionAt(startIndex),
+                    document.positionAt(finalEndIndex)
+                );
+            }
+        }
+
+        // Replace the old block or insert at the top
         editor.edit(editBuilder => {
-            if (existingMatch) {
-                const startPos = document.positionAt(existingMatch.index);
-                const endPos = document.positionAt(existingMatch.index + existingMatch[0].length);
-                editBuilder.replace(new vscode.Range(startPos, endPos), typeExport);
+            if (existingRange) {
+                editBuilder.replace(existingRange, typeExport);
             } else {
                 editBuilder.insert(new vscode.Position(0, 0), typeExport);
             }
