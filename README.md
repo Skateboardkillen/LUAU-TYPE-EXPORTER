@@ -27,3 +27,26 @@ function Player:TakeDamage(amount: number)
 end
 
 return Player
+```
+
+**After pressing `Ctrl+K, L`:**
+```luau
+export type Player = {
+    Name: string,
+    Health: number,
+    TakeDamage: (Player, amount: number) -> (),
+}
+
+local Player = {}
+-- ... rest of your code
+```
+
+## Installation (Private VSIX)
+
+1. Build the package locally:
+   ```bash
+   vsce package
+   ```
+2. In VS Code, open the Extensions tab (`Ctrl+Shift+X`).
+3. Click `...` at the top right -> **Install from VSIX...**
+4. Select the generated `.vsix` file.
