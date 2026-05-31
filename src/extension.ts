@@ -19,10 +19,16 @@ export function activate(context: vscode.ExtensionContext) {
         const properties = new Set<string>();
         const methods = new Map<string, string>();
 
-        // Parse properties assigned to 'self' and infer basic types
+        // IMPORTANT FIX: Isolate the constructor function block (.new) 
+        // This prevents picking up property mutations inside other methods.
+        const constructorRegex = new RegExp(`function\\s+${className}\\.new\\s*\\([\\s\\S]*?\\nend`, 'g');
+        const constructorMatch = constructorRegex.exec(text);
+        const constructorText = constructorMatch ? constructorMatch[0] : '';
+
+        // Parse properties ONLY from the constructor scope
         const selfPropertyRegex = /self\.(\w+)(?:\s*:\s*([^=]+?))?\s*=\s*(.*)/g;
         let propMatch;
-        while ((propMatch = selfPropertyRegex.exec(text)) !== null) {
+        while ((propMatch = selfPropertyRegex.exec(constructorText)) !== null) {
             const propName = propMatch[1];
             let type = propMatch[2] ? propMatch[2].trim() : null;
             
@@ -45,7 +51,7 @@ export function activate(context: vscode.ExtensionContext) {
             properties.add(`    ${propName}: ${type},`);
         }
 
-        // Parse methods and capture explicit return types
+        // Parse methods from the FULL document
         const methodRegex = new RegExp(`function\\s+${className}([:.])(\\w+)\\s*\\(([^)]*)\\)(?:\\s*:\\s*(.+))?`, 'g');
         let methodMatch;
         while ((methodMatch = methodRegex.exec(text)) !== null) {
