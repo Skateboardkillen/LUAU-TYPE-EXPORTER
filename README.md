@@ -1,4 +1,4 @@
-# Luau Type Gen
+# Luau Type Exporter
 
 A minimal VS Code extension for Roblox/Luau developers. It automatically generates and updates `export type` definitions for your classes.
 
