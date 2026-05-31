@@ -3,17 +3,15 @@ import * as vscode from 'vscode';
 export function activate(context: vscode.ExtensionContext) {
     let disposable = vscode.commands.registerCommand('luau-type-generator.generateType', () => {
         const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-            return;
-        }
+        if (!editor) return;
 
         const document = editor.document;
         const text = document.getText();
 
-        // 1. Identify the class/module name
+        // Identify the class declaration
         const classNameMatch = text.match(/local\s+(\w+)\s*=\s*\{\}/);
         if (!classNameMatch) {
-            vscode.window.showErrorMessage("Could not identify a Luau class declaration (e.g., 'local ClassName = {}').");
+            vscode.window.showErrorMessage("Could not identify a Luau class declaration.");
             return;
         }
         const className = classNameMatch[1];
@@ -21,60 +19,65 @@ export function activate(context: vscode.ExtensionContext) {
         const properties = new Set<string>();
         const methods = new Map<string, string>();
 
-        // 2. Parse Properties assigned to 'self'
-        const selfPropertyRegex = /self\.(\w+)\s*(?::\s*([\w<>|&?:]+))?\s*=/g;
+        // Parse properties assigned to 'self'
+        const selfPropertyRegex = /self\.(\w+)\s*(?::\s*([\w<>|&?:]+))?\s*=\s*(.*)/g;
         let propMatch;
         while ((propMatch = selfPropertyRegex.exec(text)) !== null) {
             const propName = propMatch[1];
-            const explicitType = propMatch[2] ? propMatch[2].trim() : 'any';
-            properties.add(`    ${propName}: ${explicitType},`);
+            let type = propMatch[2] ? propMatch[2].trim() : null;
+            
+            if (!type) {
+                const val = propMatch[3].trim();
+                if (val === 'true' || val === 'false') type = 'boolean';
+                else if (!isNaN(Number(val)) && val !== '') type = 'number';
+                else if (val.startsWith('"') || val.startsWith("'")) type = 'string';
+                else type = 'any';
+            }
+            properties.add(`    ${propName}: ${type},`);
         }
 
-        // 3. Parse Methods
-        const methodRegex = new RegExp(`function\\s+${className}[:.](\\w+)\\s*\\(([^)]*)\\)`, 'g');
+        // Parse class methods and explicit return types
+        const methodRegex = new RegExp(`function\\s+${className}([:.])(\\w+)\\s*\\(([^)]*)\\)(?:\\s*:\\s*([^\\n]+))?`, 'g');
         let methodMatch;
         while ((methodMatch = methodRegex.exec(text)) !== null) {
-            const methodName = methodMatch[1];
-            const argumentsText = methodMatch[2].trim();
-            const formattedArgs = argumentsText ? argumentsText : "";
-            methods.set(methodName, `    ${methodName}: (${className}, ${formattedArgs}) -> (),`);
+            const separator = methodMatch[1];
+            const methodName = methodMatch[2];
+            const argumentsText = methodMatch[3].trim();
+            const explicitReturn = methodMatch[4] ? methodMatch[4].trim() : null;
+            
+            let signatureArgs = argumentsText;
+            if (separator === ':') {
+                signatureArgs = argumentsText ? `${className}, ${argumentsText}` : className;
+            }
+
+            let returnType = '()';
+            if (explicitReturn) {
+                returnType = explicitReturn;
+            } else if (methodName === 'new') {
+                returnType = className;
+            }
+
+            methods.set(methodName, `    ${methodName}: (${signatureArgs}) -> ${returnType},`);
         }
 
-        // 4. Construct the Export Type block
+        // Construct the type export block
         let typeExport = `export type ${className} = {\n`;
-        properties.forEach(prop => {
-            typeExport += prop + '\n';
-        });
-        methods.forEach(methodSignature => {
-            typeExport += methodSignature + '\n';
-        });
+        properties.forEach(prop => { typeExport += prop + '\n'; });
+        methods.forEach(methodSignature => { typeExport += methodSignature + '\n'; });
         typeExport += `}\n\n`;
 
-        // 5. Look for an existing type export block to overwrite
-        // This regex captures "export type ClassName = { ... }" and any trailing blank lines
+        // Check for an existing block to overwrite
         const existingTypeRegex = new RegExp(`export\\s+type\\s+${className}\\s*=\\s*\\{[\\s\\S]*?\\}\\n*`);
         const existingMatch = existingTypeRegex.exec(text);
 
-        // 6. Apply the edit (Replace if found, Insert if new)
+        // Apply the edit to the document
         editor.edit(editBuilder => {
             if (existingMatch) {
-                // Find the exact document coordinates of the existing block
                 const startPos = document.positionAt(existingMatch.index);
                 const endPos = document.positionAt(existingMatch.index + existingMatch[0].length);
-                const range = new vscode.Range(startPos, endPos);
-                
-                // Overwrite it
-                editBuilder.replace(range, typeExport);
+                editBuilder.replace(new vscode.Range(startPos, endPos), typeExport);
             } else {
-                // Insert at the top of the file
                 editBuilder.insert(new vscode.Position(0, 0), typeExport);
-            }
-        }).then(success => {
-            if (success) {
-                // Give dynamic feedback based on what action was taken
-                vscode.window.showInformationMessage(existingMatch 
-                    ? `Successfully updated export type for ${className}!` 
-                    : `Successfully generated export type for ${className}!`);
             }
         });
     });
