@@ -20,15 +20,17 @@ export function activate(context: vscode.ExtensionContext) {
         const methods = new Map<string, string>();
 
         // Parse properties assigned to 'self' and infer basic types
-        const selfPropertyRegex = /self\.(\w+)\s*(?::\s*([a-zA-Z0-9_<>|&?{}[\]]+))?\s*=\s*(.*)/g;
+        const selfPropertyRegex = /self\.(\w+)(?:\s*:\s*([^=]+?))?\s*=\s*(.*)/g;
         let propMatch;
         while ((propMatch = selfPropertyRegex.exec(text)) !== null) {
             const propName = propMatch[1];
             let type = propMatch[2] ? propMatch[2].trim() : null;
-            let val = propMatch[3].trim();
             
-            // NEW: Check if the value uses the Luau type casting operator (::)
-            const castMatch = val.match(/::\s*([a-zA-Z0-9_<>|&?{}[\]]+)/);
+            // Clean value of any inline comments
+            let val = propMatch[3].split('--')[0].trim();
+            
+            // Check if the value uses the Luau type casting operator (::)
+            const castMatch = val.match(/::\s*(.+)/);
             if (castMatch) {
                 type = castMatch[1].trim();
             }
@@ -44,13 +46,15 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         // Parse methods and capture explicit return types
-        const methodRegex = new RegExp(`function\\s+${className}([:.])(\\w+)\\s*\\(([^)]*)\\)(?:\\s*:\\s*([^{\\n]+))?`, 'g');
+        const methodRegex = new RegExp(`function\\s+${className}([:.])(\\w+)\\s*\\(([^)]*)\\)(?:\\s*:\\s*(.+))?`, 'g');
         let methodMatch;
         while ((methodMatch = methodRegex.exec(text)) !== null) {
             const separator = methodMatch[1];
             const methodName = methodMatch[2];
             const argumentsText = methodMatch[3].trim();
-            const explicitReturn = methodMatch[4] ? methodMatch[4].trim() : null;
+            
+            // Strip comments out of the return type if they exist
+            const explicitReturn = methodMatch[4] ? methodMatch[4].split('--')[0].trim() : null;
             
             let signatureArgs = argumentsText;
             if (separator === ':') {
