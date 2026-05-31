@@ -12,13 +12,21 @@
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [
-      {
-        "command": "luau-type-exporter.helloWorld",
-        "title": "Hello World"
-      }
-    ]
-  },
+  "commands": [
+    {
+      "command": "luau-type-generator.generateType",
+      "title": "Luau: Generate Type Export from Class"
+    }
+  ],
+  "keybindings": [
+    {
+      "command": "luau-type-generator.generateType",
+      "key": "ctrl+shift+alt+l",
+      "mac": "cmd+shift+alt+l",
+      "when": "editorTextFocus"
+    }
+  ]
+},
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",

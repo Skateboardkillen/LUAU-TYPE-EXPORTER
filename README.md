@@ -1,71 +1,29 @@
-# luau-type-exporter README
+# Luau Type Gen
 
-This is the README for your extension "luau-type-exporter". After writing up a brief description, we recommend including the following sections.
+A minimal VS Code extension for Roblox/Luau developers. It automatically generates and updates `export type` definitions for your classes.
 
-## Features
+## Usage
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+Open a `.luau` file with a class structure and press **`Ctrl + K`**, then **`L`**.
 
-For example if there is an image subfolder under your extension project workspace:
+The extension parses your `self` properties and `Class:Method` definitions, injecting the explicit types at the top of the file. Pressing the keybind again will safely update the existing block.
 
-\!\[feature X\]\(images/feature-x.png\)
+### Example
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+**Before:**
+```luau
+local Player = {}
+Player.__index = Player
 
-## Requirements
+function Player.new()
+    local self = setmetatable({}, Player)
+    self.Name: string = "Guest"
+    self.Health: number = 100
+    return self
+end
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+function Player:TakeDamage(amount: number)
+    self.Health -= amount
+end
 
-## Extension Settings
-
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+return Player

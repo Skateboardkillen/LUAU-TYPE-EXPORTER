@@ -1,26 +1,85 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+    let disposable = vscode.commands.registerCommand('luau-type-generator.generateType', () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            return;
+        }
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "luau-type-exporter" is now active!');
+        const document = editor.document;
+        const text = document.getText();
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('luau-type-exporter.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from LUAU Auto Type Export!');
-	});
+        // 1. Identify the class/module name
+        const classNameMatch = text.match(/local\s+(\w+)\s*=\s*\{\}/);
+        if (!classNameMatch) {
+            vscode.window.showErrorMessage("Could not identify a Luau class declaration (e.g., 'local ClassName = {}').");
+            return;
+        }
+        const className = classNameMatch[1];
 
-	context.subscriptions.push(disposable);
+        const properties = new Set<string>();
+        const methods = new Map<string, string>();
+
+        // 2. Parse Properties assigned to 'self'
+        const selfPropertyRegex = /self\.(\w+)\s*(?::\s*([\w<>|&?:]+))?\s*=/g;
+        let propMatch;
+        while ((propMatch = selfPropertyRegex.exec(text)) !== null) {
+            const propName = propMatch[1];
+            const explicitType = propMatch[2] ? propMatch[2].trim() : 'any';
+            properties.add(`    ${propName}: ${explicitType},`);
+        }
+
+        // 3. Parse Methods
+        const methodRegex = new RegExp(`function\\s+${className}[:.](\\w+)\\s*\\(([^)]*)\\)`, 'g');
+        let methodMatch;
+        while ((methodMatch = methodRegex.exec(text)) !== null) {
+            const methodName = methodMatch[1];
+            const argumentsText = methodMatch[2].trim();
+            const formattedArgs = argumentsText ? argumentsText : "";
+            methods.set(methodName, `    ${methodName}: (${className}, ${formattedArgs}) -> (),`);
+        }
+
+        // 4. Construct the Export Type block
+        let typeExport = `export type ${className} = {\n`;
+        properties.forEach(prop => {
+            typeExport += prop + '\n';
+        });
+        methods.forEach(methodSignature => {
+            typeExport += methodSignature + '\n';
+        });
+        typeExport += `}\n\n`;
+
+        // 5. Look for an existing type export block to overwrite
+        // This regex captures "export type ClassName = { ... }" and any trailing blank lines
+        const existingTypeRegex = new RegExp(`export\\s+type\\s+${className}\\s*=\\s*\\{[\\s\\S]*?\\}\\n*`);
+        const existingMatch = existingTypeRegex.exec(text);
+
+        // 6. Apply the edit (Replace if found, Insert if new)
+        editor.edit(editBuilder => {
+            if (existingMatch) {
+                // Find the exact document coordinates of the existing block
+                const startPos = document.positionAt(existingMatch.index);
+                const endPos = document.positionAt(existingMatch.index + existingMatch[0].length);
+                const range = new vscode.Range(startPos, endPos);
+                
+                // Overwrite it
+                editBuilder.replace(range, typeExport);
+            } else {
+                // Insert at the top of the file
+                editBuilder.insert(new vscode.Position(0, 0), typeExport);
+            }
+        }).then(success => {
+            if (success) {
+                // Give dynamic feedback based on what action was taken
+                vscode.window.showInformationMessage(existingMatch 
+                    ? `Successfully updated export type for ${className}!` 
+                    : `Successfully generated export type for ${className}!`);
+            }
+        });
+    });
+
+    context.subscriptions.push(disposable);
 }
 
-// This method is called when your extension is deactivated
 export function deactivate() {}
