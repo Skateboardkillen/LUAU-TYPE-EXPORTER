@@ -25,9 +25,16 @@ export function activate(context: vscode.ExtensionContext) {
         while ((propMatch = selfPropertyRegex.exec(text)) !== null) {
             const propName = propMatch[1];
             let type = propMatch[2] ? propMatch[2].trim() : null;
+            let val = propMatch[3].trim();
             
+            // NEW: Check if the value uses the Luau type casting operator (::)
+            const castMatch = val.match(/::\s*([a-zA-Z0-9_<>|&?{}[\]]+)/);
+            if (castMatch) {
+                type = castMatch[1].trim();
+            }
+            
+            // If still no type, infer from primitives
             if (!type) {
-                const val = propMatch[3].trim();
                 if (val === 'true' || val === 'false') type = 'boolean';
                 else if (!isNaN(Number(val)) && val !== '') type = 'number';
                 else if (val.startsWith('"') || val.startsWith("'")) type = 'string';
